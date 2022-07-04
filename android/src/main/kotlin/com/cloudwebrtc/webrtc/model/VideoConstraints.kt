@@ -165,65 +165,59 @@ data class VideoConstraints(
      *
      * @return [VideoConstraints] created from the provided [Map].
      */
-    fun fromMap(map: Map<*, *>): VideoConstraints? {
+    fun fromMap(map: Map<*, *>): VideoConstraints {
       val constraintCheckers = mutableListOf<ConstraintChecker>()
       var width: Int? = null
       var height: Int? = null
       var fps: Int? = null
 
       val mandatoryArg = map["mandatory"] as Map<*, *>?
-      val optionalArg = map["optional"] as Map<*, *>?
-
-      if (mandatoryArg == null && optionalArg == null) {
-        return null
-      } else {
-        for ((key, value) in mandatoryArg ?: mapOf<Any, Any>()) {
-          if (value != null) {
-            when (key as String) {
-              "deviceId" -> {
-                constraintCheckers.add(DeviceIdConstraint(value as String, true))
-              }
-              "facingMode" -> {
-                constraintCheckers.add(FacingModeConstraint(FacingMode.fromInt(value as Int), true))
-              }
-              "width" -> {
-                width = value as Int
-              }
-              "height" -> {
-                height = value as Int
-              }
-              "fps" -> {
-                fps = value as Int
-              }
+      for ((key, value) in mandatoryArg ?: mapOf<Any, Any>()) {
+        if (value != null) {
+          when (key as String) {
+            "deviceId" -> {
+              constraintCheckers.add(DeviceIdConstraint(value as String, true))
+            }
+            "facingMode" -> {
+              constraintCheckers.add(FacingModeConstraint(FacingMode.fromInt(value as Int), true))
+            }
+            "width" -> {
+              width = value as Int
+            }
+            "height" -> {
+              height = value as Int
+            }
+            "fps" -> {
+              fps = value as Int
             }
           }
         }
-
-        for ((key, value) in optionalArg ?: mapOf<Any, Any>()) {
-          if (value != null) {
-            when (key as String) {
-              "deviceId" -> {
-                constraintCheckers.add(DeviceIdConstraint(value as String, false))
-              }
-              "facingMode" -> {
-                constraintCheckers.add(
-                    FacingModeConstraint(FacingMode.fromInt(value as Int), false))
-              }
-              "width" -> {
-                width = value as Int
-              }
-              "height" -> {
-                height = value as Int
-              }
-              "fps" -> {
-                fps = value as Int
-              }
-            }
-          }
-        }
-
-        return VideoConstraints(constraintCheckers, width, height, fps)
       }
+
+      val optionalArg = map["optional"] as Map<*, *>?
+      for ((key, value) in optionalArg ?: mapOf<Any, Any>()) {
+        if (value != null) {
+          when (key as String) {
+            "deviceId" -> {
+              constraintCheckers.add(DeviceIdConstraint(value as String, false))
+            }
+            "facingMode" -> {
+              constraintCheckers.add(FacingModeConstraint(FacingMode.fromInt(value as Int), false))
+            }
+            "width" -> {
+              width = value as Int
+            }
+            "height" -> {
+              height = value as Int
+            }
+            "fps" -> {
+              fps = value as Int
+            }
+          }
+        }
+      }
+
+      return VideoConstraints(constraintCheckers, width, height, fps)
     }
   }
 

@@ -232,62 +232,6 @@ pub extern "C" fn wire_set_transceiver_direction(
 }
 
 #[no_mangle]
-pub extern "C" fn wire_set_transceiver_recv(
-    port_: i64,
-    peer_id: u64,
-    transceiver_index: u32,
-    recv: bool,
-) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap(
-        WrapInfo {
-            debug_name: "set_transceiver_recv",
-            port: Some(port_),
-            mode: FfiCallMode::Normal,
-        },
-        move || {
-            let api_peer_id = peer_id.wire2api();
-            let api_transceiver_index = transceiver_index.wire2api();
-            let api_recv = recv.wire2api();
-            move |task_callback| {
-                set_transceiver_recv(
-                    api_peer_id,
-                    api_transceiver_index,
-                    api_recv,
-                )
-            }
-        },
-    )
-}
-
-#[no_mangle]
-pub extern "C" fn wire_set_transceiver_send(
-    port_: i64,
-    peer_id: u64,
-    transceiver_index: u32,
-    send: bool,
-) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap(
-        WrapInfo {
-            debug_name: "set_transceiver_send",
-            port: Some(port_),
-            mode: FfiCallMode::Normal,
-        },
-        move || {
-            let api_peer_id = peer_id.wire2api();
-            let api_transceiver_index = transceiver_index.wire2api();
-            let api_send = send.wire2api();
-            move |task_callback| {
-                set_transceiver_send(
-                    api_peer_id,
-                    api_transceiver_index,
-                    api_send,
-                )
-            }
-        },
-    )
-}
-
-#[no_mangle]
 pub extern "C" fn wire_get_transceiver_mid(
     port_: i64,
     peer_id: u64,
@@ -538,26 +482,6 @@ pub extern "C" fn wire_dispose_track(
 }
 
 #[no_mangle]
-pub extern "C" fn wire_track_state(
-    port_: i64,
-    track_id: *mut wire_uint_8_list,
-    kind: i32,
-) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap(
-        WrapInfo {
-            debug_name: "track_state",
-            port: Some(port_),
-            mode: FfiCallMode::Normal,
-        },
-        move || {
-            let api_track_id = track_id.wire2api();
-            let api_kind = kind.wire2api();
-            move |task_callback| track_state(api_track_id, api_kind)
-        },
-    )
-}
-
-#[no_mangle]
 pub extern "C" fn wire_set_track_enabled(
     port_: i64,
     track_id: *mut wire_uint_8_list,
@@ -668,16 +592,18 @@ pub extern "C" fn wire_create_video_sink(
 }
 
 #[no_mangle]
-pub extern "C" fn wire_dispose_video_sink(port_: i64, sink_id: i64) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap(
+pub extern "C" fn wire_dispose_video_sink(
+    sink_id: i64,
+) -> support::WireSyncReturnStruct {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync(
         WrapInfo {
             debug_name: "dispose_video_sink",
-            port: Some(port_),
-            mode: FfiCallMode::Normal,
+            port: None,
+            mode: FfiCallMode::Sync,
         },
         move || {
             let api_sink_id = sink_id.wire2api();
-            move |task_callback| Ok(dispose_video_sink(api_sink_id))
+            Ok(dispose_video_sink(api_sink_id))
         },
     )
 }
@@ -1112,7 +1038,6 @@ impl support::IntoDart for GetMediaError {
         .into_dart()
     }
 }
-impl support::IntoDartExceptPrimitive for GetMediaError {}
 
 impl support::IntoDart for GetMediaResult {
     fn into_dart(self) -> support::DartCObject {
@@ -1123,7 +1048,6 @@ impl support::IntoDart for GetMediaResult {
         .into_dart()
     }
 }
-impl support::IntoDartExceptPrimitive for GetMediaResult {}
 
 impl support::IntoDart for IceConnectionState {
     fn into_dart(self) -> support::DartCObject {
@@ -1329,16 +1253,6 @@ impl support::IntoDart for TrackEvent {
     fn into_dart(self) -> support::DartCObject {
         match self {
             Self::Ended => 0,
-        }
-        .into_dart()
-    }
-}
-
-impl support::IntoDart for TrackState {
-    fn into_dart(self) -> support::DartCObject {
-        match self {
-            Self::Live => 0,
-            Self::Ended => 1,
         }
         .into_dart()
     }

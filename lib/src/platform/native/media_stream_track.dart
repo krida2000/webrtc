@@ -18,9 +18,6 @@ abstract class NativeMediaStreamTrack extends MediaStreamTrack {
     }
   }
 
-  /// Indicates whether this [NativeMediaStreamTrack] has been stopped.
-  bool _stopped = false;
-
   /// Indicates whether this [NativeMediaStreamTrack] transmits media.
   ///
   /// If it's `false` then blank (black screen for video and `0dB` for audio)
@@ -111,28 +108,13 @@ class _NativeMediaStreamTrackChannel extends NativeMediaStreamTrack {
   }
 
   @override
-  Future<MediaStreamTrackState> state() async {
-    return !_stopped
-        ? MediaStreamTrackState.values[await _chan.invokeMethod('state')]
-        : MediaStreamTrackState.ended;
-  }
-
-  @override
   Future<void> stop() async {
-    _onEnded = null;
-
     await _chan.invokeMethod('stop');
-
-    _stopped = true;
   }
 
   @override
   Future<void> dispose() async {
-    _onEnded = null;
-
     await _eventSub?.cancel();
-
-    _stopped = true;
   }
 
   @override
@@ -143,6 +125,9 @@ class _NativeMediaStreamTrackChannel extends NativeMediaStreamTrack {
 
 /// FFI-based implementation of a [NativeMediaStreamTrack].
 class _NativeMediaStreamTrackFFI extends NativeMediaStreamTrack {
+  /// Indicates whether this [NativeMediaStreamTrack] has been stopped.
+  bool _stopped = false;
+
   /// Creates a [NativeMediaStreamTrack] basing on the provided
   /// [ffi.MediaStreamTrack].
   _NativeMediaStreamTrackFFI(ffi.MediaStreamTrack track) {
@@ -176,8 +161,6 @@ class _NativeMediaStreamTrackFFI extends NativeMediaStreamTrack {
   @override
   Future<void> dispose() async {
     if (!_stopped) {
-      _onEnded = null;
-
       await api.disposeTrack(
           trackId: _id, kind: ffi.MediaType.values[_kind.index]);
       await _eventSub?.cancel();
@@ -198,19 +181,8 @@ class _NativeMediaStreamTrackFFI extends NativeMediaStreamTrack {
   }
 
   @override
-  Future<MediaStreamTrackState> state() async {
-    return !_stopped
-        ? MediaStreamTrackState.values[(await api.trackState(
-                trackId: _id, kind: ffi.MediaType.values[_kind.index]))
-            .index]
-        : MediaStreamTrackState.ended;
-  }
-
-  @override
   Future<void> stop() async {
     if (!_stopped) {
-      _onEnded = null;
-
       await api.disposeTrack(
           trackId: _id, kind: ffi.MediaType.values[_kind.index]);
     }

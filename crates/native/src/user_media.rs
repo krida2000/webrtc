@@ -8,7 +8,7 @@ use anyhow::{anyhow, bail, Context};
 use derive_more::{AsRef, Display, From, Into};
 use libwebrtc_sys as sys;
 use sys::TrackEventObserver;
-use xxhash::xxh3::xxh3_64;
+use xxhash_rust::xxh3::xxh3_64;
 
 use crate::{
     api,
@@ -279,37 +279,6 @@ impl Webrtc {
         };
 
         Ok(src)
-    }
-
-    /// Returns the [readyState][0] property of the media track by its ID and
-    /// media type.
-    ///
-    /// [0]: https://w3.org/TR/mediacapture-streams#dfn-readystate
-    pub fn track_state(
-        &self,
-        id: String,
-        kind: api::MediaType,
-    ) -> anyhow::Result<api::TrackState> {
-        Ok(match kind {
-            MediaType::Audio => {
-                let id = AudioTrackId::from(id);
-                self.audio_tracks
-                    .get(&id)
-                    .ok_or_else(|| {
-                        anyhow!("Cannot find audio track with ID `{id}`")
-                    })?
-                    .state()
-            }
-            MediaType::Video => {
-                let id = VideoTrackId::from(id);
-                self.video_tracks
-                    .get(&id)
-                    .ok_or_else(|| {
-                        anyhow!("Cannot find video track with ID `{id}`")
-                    })?
-                    .state()
-            }
-        })
     }
 
     /// Changes the [enabled][1] property of the media track by its ID.
@@ -840,15 +809,6 @@ impl VideoTrack {
         self.inner.set_enabled(enabled);
     }
 
-    /// Returns the [readyState][0] property of the underlying
-    /// [`sys::VideoTrackInterface`].
-    ///
-    /// [0]: https://w3.org/TR/mediacapture-streams#dfn-readystate
-    #[must_use]
-    pub fn state(&self) -> api::TrackState {
-        self.inner.state().into()
-    }
-
     /// Returns peers and transceivers sending this [`VideoTrack`].
     pub fn senders(&mut self) -> &mut HashMap<PeerConnectionId, HashSet<u32>> {
         &mut self.senders
@@ -944,15 +904,6 @@ impl AudioTrack {
     #[must_use]
     pub fn id(&self) -> AudioTrackId {
         self.id.clone()
-    }
-
-    /// Returns the [readyState][0] property of the underlying
-    /// [`sys::AudioTrackInterface`].
-    ///
-    /// [0]: https://w3.org/TR/mediacapture-streams#dfn-readystate
-    #[must_use]
-    pub fn state(&self) -> api::TrackState {
-        self.inner.state().into()
     }
 
     /// Changes the [enabled][1] property of the underlying

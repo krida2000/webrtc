@@ -1,7 +1,7 @@
 use std::{mem, sync::Mutex};
 
 use cxx::UniquePtr;
-use flutter_rust_bridge::StreamSink;
+use flutter_rust_bridge::{StreamSink, SyncReturn};
 use libwebrtc_sys as sys;
 
 use crate::{cpp_api::OnFrameCallbackInterface, Webrtc};
@@ -311,33 +311,6 @@ pub enum MediaDeviceKind {
 
     /// Video input device (for example, a webcam).
     VideoInput,
-}
-
-/// Indicator of the current [MediaStreamTrackState][0] of a
-/// [`MediaStreamTrack`].
-///
-/// [0]: https://w3.org/TR/mediacapture-streams#dom-mediastreamtrackstate
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum TrackState {
-    /// [MediaStreamTrackState.live][0] representation.
-    ///
-    /// [0]: https://tinyurl.com/w3mcs#idl-def-MediaStreamTrackState.live
-    Live,
-
-    /// [MediaStreamTrackState.ended][0] representation.
-    ///
-    /// [0]: https://tinyurl.com/w3mcs#idl-def-MediaStreamTrackState.ended
-    Ended,
-}
-
-impl From<sys::TrackState> for TrackState {
-    fn from(state: sys::TrackState) -> Self {
-        match state {
-            sys::TrackState::kLive => Self::Live,
-            sys::TrackState::kEnded => Self::Ended,
-            _ => unreachable!(),
-        }
-    }
 }
 
 /// [RTCRtpTransceiverDirection][1] representation.
@@ -890,32 +863,6 @@ pub fn set_transceiver_direction(
     )
 }
 
-/// Changes the receive direction of the specified [`RtcRtpTransceiver`].
-pub fn set_transceiver_recv(
-    peer_id: u64,
-    transceiver_index: u32,
-    recv: bool,
-) -> anyhow::Result<()> {
-    WEBRTC.lock().unwrap().set_transceiver_recv(
-        peer_id,
-        transceiver_index,
-        recv,
-    )
-}
-
-/// Changes the send direction of the specified [`RtcRtpTransceiver`].
-pub fn set_transceiver_send(
-    peer_id: u64,
-    transceiver_index: u32,
-    send: bool,
-) -> anyhow::Result<()> {
-    WEBRTC.lock().unwrap().set_transceiver_send(
-        peer_id,
-        transceiver_index,
-        send,
-    )
-}
-
 /// Returns the [negotiated media ID (mid)][1] of the specified
 /// [`RtcRtpTransceiver`].
 ///
@@ -1034,17 +981,6 @@ pub fn dispose_track(track_id: String, kind: MediaType) {
     WEBRTC.lock().unwrap().dispose_track(track_id, kind);
 }
 
-/// Returns the [readyState][0] property of the [`MediaStreamTrack`] by its ID
-/// and [`MediaType`].
-///
-/// [0]: https://w3.org/TR/mediacapture-streams#dfn-readystate
-pub fn track_state(
-    track_id: String,
-    kind: MediaType,
-) -> anyhow::Result<TrackState> {
-    WEBRTC.lock().unwrap().track_state(track_id, kind)
-}
-
 /// Changes the [enabled][1] property of the [`MediaStreamTrack`] by its ID and
 /// [`MediaType`].
 ///
@@ -1109,6 +1045,8 @@ pub fn create_video_sink(
 }
 
 /// Destroys the [`VideoSink`] by the provided ID.
-pub fn dispose_video_sink(sink_id: i64) {
+// TODO: Fix return type when SyncReturn allows other types.
+pub fn dispose_video_sink(sink_id: i64) -> SyncReturn<Vec<u8>> {
     WEBRTC.lock().unwrap().dispose_video_sink(sink_id);
+    SyncReturn(Vec::new())
 }

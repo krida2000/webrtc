@@ -44,13 +44,6 @@ class WebMediaStreamTrack extends MediaStreamTrack {
   }
 
   @override
-  Future<MediaStreamTrackState> state() {
-    return Future.value(jsTrack.readyState == 'live'
-        ? MediaStreamTrackState.live
-        : MediaStreamTrackState.ended);
-  }
-
-  @override
   Future<void> setEnabled(bool enabled) async {
     jsTrack.enabled = enabled;
   }
