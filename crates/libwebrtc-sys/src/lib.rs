@@ -16,7 +16,7 @@ pub use crate::webrtc::{
     video_frame_to_abgr, AudioLayer, BundlePolicy, Candidate,
     CandidatePairChangeEvent, IceConnectionState, IceGatheringState,
     IceTransportsType, MediaType, PeerConnectionState, RtpTransceiverDirection,
-    SdpType, SignalingState, VideoFrame, VideoRotation,
+    SdpType, SignalingState, TrackState, VideoFrame, VideoRotation,
 };
 
 /// Handler of events firing from a [`MediaStreamTrackInterface`].
@@ -198,6 +198,14 @@ impl AudioDeviceModule {
             bail!("`null` pointer returned from `AudioDeviceModule::Create()`");
         }
         Ok(Self(ptr))
+    }
+
+    /// Creates a new fake [`AudioDeviceModule`], that will not try to access
+    /// real media devices, but will generate pulsed noise.
+    pub fn create_fake(task_queue_factory: &mut TaskQueueFactory) -> Self {
+        Self(webrtc::create_fake_audio_device_module(
+            task_queue_factory.0.pin_mut(),
+        ))
     }
 
     /// Initializes the current [`AudioDeviceModule`].
@@ -671,7 +679,7 @@ impl RtpTransceiverInterface {
     #[must_use]
     pub fn mid(&self) -> Option<String> {
         let mid = webrtc::get_transceiver_mid(&self.inner);
-        (!mid.is_empty()).then(|| mid)
+        (!mid.is_empty()).then_some(mid)
     }
 
     /// Returns a [`direction`][0] of this [`RtpTransceiverInterface`].
@@ -1418,6 +1426,31 @@ impl VideoTrackSourceInterface {
         Ok(VideoTrackSourceInterface(ptr))
     }
 
+    /// Creates a new fake [`VideoTrackSourceInterface`].
+    pub fn create_fake(
+        worker_thread: &mut Thread,
+        signaling_thread: &mut Thread,
+        width: usize,
+        height: usize,
+        fps: usize,
+    ) -> anyhow::Result<Self> {
+        let ptr = webrtc::create_fake_device_video_source(
+            worker_thread.0.pin_mut(),
+            signaling_thread.0.pin_mut(),
+            width,
+            height,
+            fps,
+        );
+
+        if ptr.is_null() {
+            bail!(
+                "`null` pointer returned from \
+                 `webrtc::CreateVideoTrackSource()`",
+            );
+        }
+        Ok(VideoTrackSourceInterface(ptr))
+    }
+
     // TODO: Support screens enumeration.
     /// Starts screen capturing and creates a new [`VideoTrackSourceInterface`]
     /// with the specified constraints.
@@ -1583,6 +1616,14 @@ impl VideoTrackInterface {
     pub fn source(&self) -> VideoTrackSourceInterface {
         VideoTrackSourceInterface(webrtc::get_video_track_source(&self.inner))
     }
+
+    /// Returns the [readyState][0] property of this [`VideoTrackInterface`].
+    ///
+    /// [0]: https://w3.org/TR/mediacapture-streams#dfn-readystate
+    #[must_use]
+    pub fn state(&self) -> TrackState {
+        webrtc::video_track_state(&self.inner)
+    }
 }
 
 impl Drop for VideoTrackInterface {
@@ -1658,6 +1699,14 @@ impl AudioTrackInterface {
     #[must_use]
     pub fn source(&self) -> AudioSourceInterface {
         AudioSourceInterface(webrtc::get_audio_track_source(&self.inner))
+    }
+
+    /// Returns the [readyState][0] property of this [`AudioTrackInterface`].
+    ///
+    /// [0]: https://w3.org/TR/mediacapture-streams#dfn-readystate
+    #[must_use]
+    pub fn state(&self) -> TrackState {
+        webrtc::audio_track_state(&self.inner)
     }
 }
 

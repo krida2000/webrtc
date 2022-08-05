@@ -22,6 +22,10 @@
 
 #include "adm_proxy.h"
 
+#include "media/base/fake_frame_source.h"
+#include "pc/test/fake_video_track_source.h"
+#include "modules/audio_device/include/test_audio_device.h"
+
 namespace bridge {
 
 struct DynTrackEventCallback;
@@ -94,6 +98,10 @@ using MediaStreamTrackInterface =
 std::unique_ptr<AudioDeviceModule> create_audio_device_module(
     Thread& worker_thread,
     AudioLayer audio_layer,
+    TaskQueueFactory& task_queue_factory);
+
+// Creates a new fake `AudioDeviceModule`.
+std::unique_ptr<AudioDeviceModule> create_fake_audio_device_module(
     TaskQueueFactory& task_queue_factory);
 
 // Initializes the native audio parts required for each platform.
@@ -181,6 +189,15 @@ std::unique_ptr<VideoTrackSourceInterface> create_device_video_source(
     size_t fps,
     uint32_t device_index);
 
+// Creates a new fake `DeviceVideoCapturer` with the specified constraints and
+// calls `CreateVideoTrackSourceProxy()`.
+std::unique_ptr<VideoTrackSourceInterface> create_fake_device_video_source(
+    Thread& worker_thread,
+    Thread& signaling_thread,
+    size_t width,
+    size_t height,
+    size_t fps);
+
 // Starts screen capturing and creates a new `VideoTrackSourceInterface`
 // according to the specified constraints.
 std::unique_ptr<VideoTrackSourceInterface> create_display_video_source(
@@ -236,6 +253,12 @@ void set_video_track_enabled(const VideoTrackInterface& track, bool enabled);
 
 // Changes the `enabled` property of the provided `AudioTrackInterface`.
 void set_audio_track_enabled(const AudioTrackInterface& track, bool enabled);
+
+// Returns the `state` property of the provided `VideoTrackInterface`.
+TrackState video_track_state(const VideoTrackInterface& track);
+
+// Returns the `state` property of the provided `AudioTrackInterface`.
+TrackState audio_track_state(const AudioTrackInterface& track);
 
 // Registers the provided video `sink` for the given `track`.
 //

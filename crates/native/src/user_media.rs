@@ -8,11 +8,10 @@ use anyhow::{anyhow, bail, Context};
 use derive_more::{AsRef, Display, From, Into};
 use libwebrtc_sys as sys;
 use sys::TrackEventObserver;
-use xxhash_rust::xxh3::xxh3_64;
+use xxhash::xxh3::xxh3_64;
 
 use crate::{
-    api,
-    api::{MediaType, TrackEvent},
+    api::{self, MediaType, TrackEvent},
     next_id,
     stream_sink::StreamSink,
     PeerConnectionId, VideoSink, VideoSinkId, Webrtc,
@@ -281,6 +280,37 @@ impl Webrtc {
         Ok(src)
     }
 
+    /// Returns the [readyState][0] property of the media track by its ID and
+    /// media type.
+    ///
+    /// [0]: https://w3.org/TR/mediacapture-streams#dfn-readystate
+    pub fn track_state(
+        &self,
+        id: String,
+        kind: api::MediaType,
+    ) -> anyhow::Result<api::TrackState> {
+        Ok(match kind {
+            MediaType::Audio => {
+                let id = AudioTrackId::from(id);
+                self.audio_tracks
+                    .get(&id)
+                    .ok_or_else(|| {
+                        anyhow!("Cannot find audio track with ID `{id}`")
+                    })?
+                    .state()
+            }
+            MediaType::Video => {
+                let id = VideoTrackId::from(id);
+                self.video_tracks
+                    .get(&id)
+                    .ok_or_else(|| {
+                        anyhow!("Cannot find video track with ID `{id}`")
+                    })?
+                    .state()
+            }
+        })
+    }
+
     /// Changes the [enabled][1] property of the media track by its ID.
     ///
     /// [1]: https://w3.org/TR/mediacapture-streams#track-enabled
@@ -495,6 +525,45 @@ pub struct VideoLabel(String);
 #[from(forward)]
 pub struct AudioLabel(String);
 
+/// [`sys::VideoDeviceInfo`] wrapper.
+pub struct VideoDeviceInfo(sys::VideoDeviceInfo);
+
+impl VideoDeviceInfo {
+    /// Creates a new [`VideoDeviceInfo`].
+    ///
+    /// # Errors
+    ///
+    /// If [`sys::VideoDeviceInfo::create()`] returns error.
+    pub fn new() -> anyhow::Result<Self> {
+        Ok(VideoDeviceInfo(sys::VideoDeviceInfo::create()?))
+    }
+
+    /// Returns count of a video recording devices.
+    pub fn number_of_devices(&mut self) -> u32 {
+        if api::is_fake_media() {
+            1
+        } else {
+            self.0.number_of_devices()
+        }
+    }
+
+    /// Returns the `(label, id)` tuple for the given video device `index`.
+    ///
+    /// # Errors
+    ///
+    /// If [`sys::VideoDeviceInfo::device_name()`] call returns error.
+    pub fn device_name(
+        &mut self,
+        index: u32,
+    ) -> anyhow::Result<(String, String)> {
+        if api::is_fake_media() {
+            Ok((String::from("fake camera"), String::from("fake camera id")))
+        } else {
+            self.0.device_name(index)
+        }
+    }
+}
+
 /// [`sys::AudioDeviceModule`] wrapper tracking the currently used audio input
 /// device.
 #[derive(AsRef)]
@@ -543,6 +612,22 @@ impl AudioDeviceModule {
         Ok(adm)
     }
 
+    /// Creates a new [`AudioDeviceModule`] according to the passed
+    /// [`sys::AudioLayer`].
+    ///
+    /// # Errors
+    ///
+    /// If could not find any available recording device.
+    pub fn new_fake(task_queue_factory: &mut sys::TaskQueueFactory) -> Self {
+        let inner = sys::AudioDeviceModule::create_fake(task_queue_factory);
+        drop(inner.init());
+
+        Self {
+            inner,
+            current_device_id: None,
+        }
+    }
+
     /// Returns the `(label, id)` tuple for the given audio playout device
     /// `index`.
     ///
@@ -553,6 +638,13 @@ impl AudioDeviceModule {
         &self,
         index: i16,
     ) -> anyhow::Result<(String, String)> {
+        if api::is_fake_media() {
+            return Ok((
+                String::from("fake headset"),
+                String::from("fake headset id"),
+            ));
+        }
+
         let (label, mut device_id) = self.inner.playout_device_name(index)?;
 
         if device_id.is_empty() {
@@ -577,6 +669,10 @@ impl AudioDeviceModule {
         &self,
         index: i16,
     ) -> anyhow::Result<(String, String)> {
+        if api::is_fake_media() {
+            return Ok((String::from("fake mic"), String::from("fake mic id")));
+        }
+
         let (label, mut device_id) = self.inner.recording_device_name(index)?;
 
         if device_id.is_empty() {
@@ -608,7 +704,11 @@ impl AudioDeviceModule {
     /// If [`sys::AudioDeviceModule::recording_devices()`] call fails.
     #[must_use]
     pub fn recording_devices(&self) -> u32 {
-        self.inner.recording_devices()
+        if api::is_fake_media() {
+            1
+        } else {
+            self.inner.recording_devices()
+        }
     }
 
     /// Changes the recording device for this [`AudioDeviceModule`].
@@ -809,6 +909,15 @@ impl VideoTrack {
         self.inner.set_enabled(enabled);
     }
 
+    /// Returns the [readyState][0] property of the underlying
+    /// [`sys::VideoTrackInterface`].
+    ///
+    /// [0]: https://w3.org/TR/mediacapture-streams#dfn-readystate
+    #[must_use]
+    pub fn state(&self) -> api::TrackState {
+        self.inner.state().into()
+    }
+
     /// Returns peers and transceivers sending this [`VideoTrack`].
     pub fn senders(&mut self) -> &mut HashMap<PeerConnectionId, HashSet<u32>> {
         &mut self.senders
@@ -906,6 +1015,15 @@ impl AudioTrack {
         self.id.clone()
     }
 
+    /// Returns the [readyState][0] property of the underlying
+    /// [`sys::AudioTrackInterface`].
+    ///
+    /// [0]: https://w3.org/TR/mediacapture-streams#dfn-readystate
+    #[must_use]
+    pub fn state(&self) -> api::TrackState {
+        self.inner.state().into()
+    }
+
     /// Changes the [enabled][1] property of the underlying
     /// [`sys::AudioTrackInterface`].
     ///
@@ -950,14 +1068,24 @@ impl VideoSource {
         device_index: u32,
         device_id: VideoDeviceId,
     ) -> anyhow::Result<Self> {
-        let inner = sys::VideoTrackSourceInterface::create_proxy_from_device(
-            worker_thread,
-            signaling_thread,
-            caps.width as usize,
-            caps.height as usize,
-            caps.frame_rate as usize,
-            device_index,
-        )
+        let inner = if api::is_fake_media() {
+            sys::VideoTrackSourceInterface::create_fake(
+                worker_thread,
+                signaling_thread,
+                caps.width as usize,
+                caps.height as usize,
+                caps.frame_rate as usize,
+            )
+        } else {
+            sys::VideoTrackSourceInterface::create_proxy_from_device(
+                worker_thread,
+                signaling_thread,
+                caps.width as usize,
+                caps.height as usize,
+                caps.frame_rate as usize,
+                device_index,
+            )
+        }
         .with_context(|| {
             format!("Failed to acquire device with ID `{device_id}`")
         })?;

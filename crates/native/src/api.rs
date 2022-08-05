@@ -1,7 +1,10 @@
-use std::{mem, sync::Mutex};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Mutex,
+};
 
 use cxx::UniquePtr;
-use flutter_rust_bridge::{StreamSink, SyncReturn};
+use flutter_rust_bridge::StreamSink;
 use libwebrtc_sys as sys;
 
 use crate::{cpp_api::OnFrameCallbackInterface, Webrtc};
@@ -9,6 +12,9 @@ use crate::{cpp_api::OnFrameCallbackInterface, Webrtc};
 lazy_static::lazy_static! {
     static ref WEBRTC: Mutex<Webrtc> = Mutex::new(Webrtc::new().unwrap());
 }
+
+/// Indicator whether application is configured to use fake media devices.
+static FAKE_MEDIA: AtomicBool = AtomicBool::new(false);
 
 /// Indicator of the current state of a [`MediaStreamTrack`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -311,6 +317,33 @@ pub enum MediaDeviceKind {
 
     /// Video input device (for example, a webcam).
     VideoInput,
+}
+
+/// Indicator of the current [MediaStreamTrackState][0] of a
+/// [`MediaStreamTrack`].
+///
+/// [0]: https://w3.org/TR/mediacapture-streams#dom-mediastreamtrackstate
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TrackState {
+    /// [MediaStreamTrackState.live][0] representation.
+    ///
+    /// [0]: https://tinyurl.com/w3mcs#idl-def-MediaStreamTrackState.live
+    Live,
+
+    /// [MediaStreamTrackState.ended][0] representation.
+    ///
+    /// [0]: https://tinyurl.com/w3mcs#idl-def-MediaStreamTrackState.ended
+    Ended,
+}
+
+impl From<sys::TrackState> for TrackState {
+    fn from(state: sys::TrackState) -> Self {
+        match state {
+            sys::TrackState::kLive => Self::Live,
+            sys::TrackState::kEnded => Self::Ended,
+            _ => unreachable!(),
+        }
+    }
 }
 
 /// [RTCRtpTransceiverDirection][1] representation.
@@ -753,6 +786,17 @@ pub struct RtcIceServer {
     pub credential: String,
 }
 
+/// Configures media acquisition to use fake devices instead of actual camera
+/// and microphone.
+pub fn enable_fake_media() {
+    FAKE_MEDIA.store(true, Ordering::Release);
+}
+
+/// Indicates whether application is configured to use fake media devices.
+pub fn is_fake_media() -> bool {
+    FAKE_MEDIA.load(Ordering::Acquire)
+}
+
 /// Returns a list of all available media input and output devices, such as
 /// microphones, cameras, headsets, and so forth.
 pub fn enumerate_devices() -> anyhow::Result<Vec<MediaDeviceInfo>> {
@@ -860,6 +904,32 @@ pub fn set_transceiver_direction(
         peer_id,
         transceiver_index,
         direction,
+    )
+}
+
+/// Changes the receive direction of the specified [`RtcRtpTransceiver`].
+pub fn set_transceiver_recv(
+    peer_id: u64,
+    transceiver_index: u32,
+    recv: bool,
+) -> anyhow::Result<()> {
+    WEBRTC.lock().unwrap().set_transceiver_recv(
+        peer_id,
+        transceiver_index,
+        recv,
+    )
+}
+
+/// Changes the send direction of the specified [`RtcRtpTransceiver`].
+pub fn set_transceiver_send(
+    peer_id: u64,
+    transceiver_index: u32,
+    send: bool,
+) -> anyhow::Result<()> {
+    WEBRTC.lock().unwrap().set_transceiver_send(
+        peer_id,
+        transceiver_index,
+        send,
     )
 }
 
@@ -981,6 +1051,17 @@ pub fn dispose_track(track_id: String, kind: MediaType) {
     WEBRTC.lock().unwrap().dispose_track(track_id, kind);
 }
 
+/// Returns the [readyState][0] property of the [`MediaStreamTrack`] by its ID
+/// and [`MediaType`].
+///
+/// [0]: https://w3.org/TR/mediacapture-streams#dfn-readystate
+pub fn track_state(
+    track_id: String,
+    kind: MediaType,
+) -> anyhow::Result<TrackState> {
+    WEBRTC.lock().unwrap().track_state(track_id, kind)
+}
+
 /// Changes the [enabled][1] property of the [`MediaStreamTrack`] by its ID and
 /// [`MediaType`].
 ///
@@ -1035,7 +1116,7 @@ pub fn create_video_sink(
     callback_ptr: u64,
 ) -> anyhow::Result<()> {
     let handler = unsafe {
-        let ptr: *mut OnFrameCallbackInterface = mem::transmute(callback_ptr);
+        let ptr = callback_ptr as *mut OnFrameCallbackInterface;
         UniquePtr::from_raw(ptr)
     };
     WEBRTC
@@ -1045,8 +1126,6 @@ pub fn create_video_sink(
 }
 
 /// Destroys the [`VideoSink`] by the provided ID.
-// TODO: Fix return type when SyncReturn allows other types.
-pub fn dispose_video_sink(sink_id: i64) -> SyncReturn<Vec<u8>> {
+pub fn dispose_video_sink(sink_id: i64) {
     WEBRTC.lock().unwrap().dispose_video_sink(sink_id);
-    SyncReturn(Vec::new())
 }

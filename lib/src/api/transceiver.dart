@@ -19,7 +19,7 @@ abstract class RtpTransceiver {
   /// Creates an [RtpTransceiver] basing on the [ffi.RtcRtpTransceiver] received
   /// from the native side.
   static RtpTransceiver fromFFI(ffi.RtcRtpTransceiver transceiver) {
-    return RtpTransceiverFFI(transceiver);
+    return _RtpTransceiverFFI(transceiver);
   }
 
   /// [RtpSender] owned by this [RtpTransceiver].
@@ -43,6 +43,22 @@ abstract class RtpTransceiver {
   /// Changes the [TransceiverDirection] of this [RtpTransceiver].
   Future<void> setDirection(TransceiverDirection direction);
 
+  /// Changes the receive direction of this [RtpTransceiver].
+  ///
+  /// This is designed to allow atomic change of an [RtpTransceiver] direction
+  /// based on the current direction. Since [getDirection] and [setDirection]
+  /// are both asynchronous operations changing direction might introduce data
+  /// races.
+  Future<void> setRecv(bool recv);
+
+  /// Changes the send direction of this [RtpTransceiver].
+  ///
+  /// This is designed to allow atomic change of an [RtpTransceiver] direction
+  /// based on the current direction. Since [getDirection] and [setDirection]
+  /// are both asynchronous operations changing direction might introduce data
+  /// races.
+  Future<void> setSend(bool send);
+
   /// Returns current preferred [TransceiverDirection] of this [RtpTransceiver].
   Future<TransceiverDirection> getDirection();
 
@@ -64,6 +80,9 @@ abstract class RtpTransceiver {
   bool isStopped() {
     return _isStopped;
   }
+
+  /// Disposes this [RtpTransceiver].
+  Future<void> dispose();
 }
 
 /// [MethodChannel]-based implementation of an [RtpTransceiver].
@@ -101,11 +120,26 @@ class _RtpTransceiverChannel extends RtpTransceiver {
     _isStopped = true;
     await _chan.invokeMethod('stop');
   }
+
+  @override
+  Future<void> setRecv(bool recv) async {
+    await _chan.invokeMethod('setRecv', {'recv': recv});
+  }
+
+  @override
+  Future<void> setSend(bool send) async {
+    await _chan.invokeMethod('setSend', {'send': send});
+  }
+
+  @override
+  Future<void> dispose() async {
+    await _chan.invokeMethod('dispose');
+  }
 }
 
 /// FFI-based implementation of an [RtpTransceiver].
-class RtpTransceiverFFI extends RtpTransceiver {
-  RtpTransceiverFFI(ffi.RtcRtpTransceiver transceiver) {
+class _RtpTransceiverFFI extends RtpTransceiver {
+  _RtpTransceiverFFI(ffi.RtcRtpTransceiver transceiver) {
     _peerId = transceiver.peerId;
     _id = transceiver.index;
     _sender = RtpSender.fromFFI(_peerId, _id);
@@ -123,14 +157,14 @@ class RtpTransceiverFFI extends RtpTransceiver {
 
   @override
   Future<TransceiverDirection> getDirection() async {
-    return TransceiverDirection.values[(await api.getTransceiverDirection(
-            peerId: _peerId, transceiverIndex: _id))
+    return TransceiverDirection.values[(await api!
+            .getTransceiverDirection(peerId: _peerId, transceiverIndex: _id))
         .index];
   }
 
   @override
   Future<void> setDirection(TransceiverDirection direction) async {
-    await api.setTransceiverDirection(
+    await api!.setTransceiverDirection(
         peerId: _peerId,
         transceiverIndex: _id,
         direction: ffi.RtpTransceiverDirection.values[direction.index]);
@@ -138,11 +172,28 @@ class RtpTransceiverFFI extends RtpTransceiver {
 
   @override
   Future<void> stop() async {
-    await api.stopTransceiver(peerId: _peerId, transceiverIndex: _id);
+    await api!.stopTransceiver(peerId: _peerId, transceiverIndex: _id);
   }
 
   @override
   Future<void> syncMid() async {
-    _mid = await api.getTransceiverMid(peerId: _peerId, transceiverIndex: _id);
+    _mid = await api!.getTransceiverMid(peerId: _peerId, transceiverIndex: _id);
+  }
+
+  @override
+  Future<void> setRecv(bool recv) async {
+    await api!
+        .setTransceiverRecv(peerId: _peerId, transceiverIndex: _id, recv: recv);
+  }
+
+  @override
+  Future<void> setSend(bool send) async {
+    await api!
+        .setTransceiverSend(peerId: _peerId, transceiverIndex: _id, send: send);
+  }
+
+  @override
+  Future<void> dispose() async {
+    // no-op for FFI implementation
   }
 }
