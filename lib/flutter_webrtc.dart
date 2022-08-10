@@ -1,6 +1,6 @@
 library flutter_webrtc;
 
-export 'src/api/devices.dart' if (dart.library.html) 'none.dart';
+export 'src/api/devices.dart';
 export 'src/api/peer.dart' if (dart.library.html) 'none.dart';
 export 'src/api/sender.dart' if (dart.library.html) 'none.dart';
 export 'src/api/transceiver.dart' if (dart.library.html) 'none.dart';
